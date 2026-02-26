@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify, url_for, send_from_directory
 from flask_migrate import Migrate
 from flask_swagger import swagger
 from api.utils import APIException, generate_sitemap
-from api.models import db
+from api.models import db, BlockedToken
 from api.routes import api
 from api.admin import setup_admin
 from api.commands import setup_commands
@@ -28,6 +28,16 @@ app.config["JWT_SECRET_KEY"] = os.getenv("FLASK_APP_KEY", "super-secret-key")
 # 3. Inicialización de extensiones
 db.init_app(app)
 jwt = JWTManager(app)
+
+# register a callback function that will check if a JWT exists in the blocklist
+@jwt.token_in_blocklist_loader
+# jwt_header and jwt_payload are provided by flask_jwt_extended when verifying tokens
+# return True if token has been revoked/blocked (i.e. should be treated as invalid)
+def check_if_token_revoked(jwt_header, jwt_payload):
+    jti = jwt_payload.get("jti")
+    # look up the jti in our BlockedToken table
+    return BlockedToken.query.filter_by(jti=jti).first() is not None
+
 bcrypt = Bcrypt(app)
 MIGRATE = Migrate(app, db, compare_type=True)
 
